@@ -1,4 +1,4 @@
-import time, os
+import asyncio, time, os
 from streamlink import Streamlink
 
 def setConfig(config_file):
@@ -17,24 +17,41 @@ def formatTitle(title):
     title = title.strip()
     return title
 
-def getTitle(session, url):
-    plugin = session.resolve_url(url)
-    title = plugin[0](url).get_metadata()["title"]
-    title = formatTitle(title)
+async def getStreamTitle(session, url):
+    plugin = session.resolve_url(url)[0]
+    title = None
+    while title == None:
+        await asyncio.sleep(1)
+        title = plugin(url).get_metadata()["title"]
     return title
 
-def getFilepath(directory, streamer, title):
-    date = time.strftime("%d-%m-%Y")
-    filepath = f'{directory}{streamer}_{date}_{title}.ts'
-    return filepath
+async def getStream(session, url):
+    while True: #todo: standardize while / if looping formatting, see inverse example: getStreamTitle
+        streamformats = session.streams(url)
+        if len(streamformats) != 0 and streamformats.get("best", None) != None:
+            stream = streamformats["best"].open()
+            return stream
+        await asyncio.sleep(1)
 
-def isStreamLive(session, url):
-    if len(session.streams(url)) != 0:
-        return True
-    else:
-        return False
+async def writeStreamToFile(stream, filepath, title):
+    vod = open(filepath, "ab")
 
-def writeStreamToFile(stream, filepath):
+    data = True
+    while bool(data):
+        data = stream.read(1024)
+        vod.write(data)
+
+        await asyncio.sleep(0)
+        if type(title) == asyncio.Task and title.done() == True:
+            title = formatTitle(title.result())
+            vod.close()
+            os.rename(filepath, f'{filepath[:-3]}_{title}.ts')
+            filepath = f'{filepath[:-3]}_{title}.ts'
+            vod = open(filepath, "ab")
+
+    print("stream over")#debug
+    vod.close()
+    print(filepath)#debug
     return
 
 
@@ -52,11 +69,15 @@ session.set_plugin_option("twitch", "record-reruns", config["record_reruns"])
 session.set_plugin_option("twitch", "disable-hosting", config["disable_hosting"])
 session.set_plugin_option("twitch", "twitch-disable-ads", config["disable_ads"])
 
-while True:
-    while isStreamLive(session, url) == False:
-        time.sleep(1)
-    
-    stream = session.streams(url)["best"].open()
-    directory, streamer, title = config["out_dir"], config["streamer"], getTitle(session, url)
-    filepath = getFilepath(directory, streamer, title)
-    writeStreamToFile(stream, filepath)
+async def mainloop():    
+    while True:
+        stream = await getStream(session, url)
+
+        directory, streamer, date = config["out_dir"], config["streamer"], time.strftime(config["time_format"]) 
+        filepath = f'{directory}{streamer}_{date}.ts'
+
+        title = asyncio.create_task(getStreamTitle(session, url))
+
+        await writeStreamToFile(stream, filepath, title)
+
+asyncio.run(mainloop())
