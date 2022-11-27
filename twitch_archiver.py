@@ -11,6 +11,18 @@ def setConfig(config_file):
             config.update({line[0].strip():line[1].strip()})
     return config
 
+def addTitleToFile(title, filepath):#todo: cleanup
+    new_filepath = f'{filepath[:-7]}{title}.ts'
+    i = 1
+    while True:
+        try:
+            os.rename(filepath, new_filepath)
+            break
+        except FileExistsError:
+            i += 1
+            new_filepath = f'{filepath[:-7]}{title} ({i}).ts'
+    return new_filepath
+
 def formatTitle(title):
     forbiddenchars = r'<>:"/\|!?*'
     title = "".join(char for char in title if char not in forbiddenchars)
@@ -26,7 +38,7 @@ async def getStreamTitle(session, url):
     return title
 
 async def getStream(session, url):
-    while True: #todo: standardize while / if looping formatting, see inverse example: getStreamTitle
+    while True: #todo: standardize while / if looping formatting, see inverse example: getStreamTitle   := ?
         streamformats = session.streams(url)
         if len(streamformats) != 0 and streamformats.get("best", None) != None:
             stream = streamformats["best"].open()
@@ -35,23 +47,17 @@ async def getStream(session, url):
 
 async def writeStreamToFile(stream, filepath, title):
     vod = open(filepath, "ab")
-
     data = True
     while bool(data):
         data = stream.read(1024)
         vod.write(data)
-
-        await asyncio.sleep(0)
+        await asyncio.sleep(0) #allows other tasks to execute
         if type(title) == asyncio.Task and title.done() == True:
             title = formatTitle(title.result())
             vod.close()
-            os.rename(filepath, f'{filepath[:-3]}_{title}.ts')
-            filepath = f'{filepath[:-3]}_{title}.ts'
+            filepath = addTitleToFile(title, filepath)
             vod = open(filepath, "ab")
-
-    print("stream over")#debug
     vod.close()
-    print(filepath)#debug
     return
 
 
@@ -74,10 +80,16 @@ async def mainloop():
         stream = await getStream(session, url)
 
         directory, streamer, date = config["out_dir"], config["streamer"], time.strftime(config["time_format"]) 
-        filepath = f'{directory}{streamer}_{date}.ts'
+        filepath = f'{directory}{streamer}_{date}_live.ts'
 
         title = asyncio.create_task(getStreamTitle(session, url))
 
         await writeStreamToFile(stream, filepath, title)
+
+        if title.done() == False:
+            title.cancel()
+            addTitleToFile("title-error", filepath)
+
+        await asyncio.sleep(5) #prevents double recording of final ~5 seconds of a stream
 
 asyncio.run(mainloop())
