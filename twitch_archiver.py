@@ -12,7 +12,7 @@ def setConfig(config_file):
     return config
 
 def addTitleToFile(title, filepath):#todo: cleanup
-    new_filepath = f'{filepath[:-7]}{title}.ts'
+    new_filepath = f'{filepath[:-7]}{title}.ts' #the [:-7] slices 'live.ts' from the end of the temporary filename
     i = 1
     while True:
         try:
@@ -38,12 +38,12 @@ async def getStreamTitle(session, url):
     return title
 
 async def getStream(session, url):
-    while True: #todo: standardize while / if looping formatting, see inverse example: getStreamTitle   := ?
-        streamformats = session.streams(url)
-        if len(streamformats) != 0 and streamformats.get("best", None) != None:
-            stream = streamformats["best"].open()
-            return stream
+    streamformats = session.streams(url)
+    while len(streamformats) == 0 and streamformats.get("best", None) == None:
         await asyncio.sleep(1)
+        streamformats = session.streams(url)
+    stream = streamformats["best"].open()
+    return stream
 
 async def writeStreamToFile(stream, filepath, title):
     vod = open(filepath, "ab")
