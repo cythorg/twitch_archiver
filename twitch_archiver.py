@@ -13,14 +13,12 @@ def setConfig(config_file):
 
 def addTitleToFile(title, filepath):#todo: cleanup FileExistsError handling
     new_filepath = f'{filepath[:-7]}{title}.ts' #the [:-7] slices 'live.ts' from the end of the temporary filename
-    i = 1
     while True:
         try:
             os.rename(filepath, new_filepath)
             break
-        except FileExistsError: #todo: add time to file instead of counter
-            i += 1
-            new_filepath = f'{filepath[:-7]}{title} ({i}).ts'
+        except FileExistsError:
+            new_filepath = f'{filepath[:-7]}{title}_{time.strftime("%H-%M")}.ts'
     return new_filepath
 
 def formatTitle(title):
@@ -33,9 +31,8 @@ async def getStreamTitle(session, url):
     title = None
     while title == None:
         await asyncio.sleep(1)
-        plugin = session.resolve_url(url)[1](session, url)
+        plugin = session.resolve_url(url)[1](session, url) #instantiates a new plugin.Twitch class, session.resolve_url returns a tuple(str, type(Plugin), str)
         title = plugin.get_title()
-        print(title, end= " ")
     return title
 
 async def getStream(session, url):
@@ -76,7 +73,7 @@ session.set_plugin_option("twitch", "record-reruns", config["record_reruns"])
 session.set_plugin_option("twitch", "disable-hosting", config["disable_hosting"])
 session.set_plugin_option("twitch", "twitch-disable-ads", config["disable_ads"])
 
-async def mainloop():    
+async def mainloop():
     while True:
         stream = await getStream(session, url)
 
@@ -91,6 +88,6 @@ async def mainloop():
             title.cancel()
             addTitleToFile("title-error", filepath)
 
-        await asyncio.sleep(5) #prevents double recording of final ~5 seconds of a stream
+        await asyncio.sleep(5) #prevents double recording of final ~5 seconds of a stream, linked to bool(data) reliability
 
 asyncio.run(mainloop())
