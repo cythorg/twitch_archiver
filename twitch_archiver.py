@@ -11,14 +11,14 @@ def setConfig(config_file):
             config.update({line[0].strip():line[1].strip()})
     return config
 
-def addTitleToFile(title, filepath):#todo: cleanup
+def addTitleToFile(title, filepath):#todo: cleanup FileExistsError handling
     new_filepath = f'{filepath[:-7]}{title}.ts' #the [:-7] slices 'live.ts' from the end of the temporary filename
     i = 1
     while True:
         try:
             os.rename(filepath, new_filepath)
             break
-        except FileExistsError:
+        except FileExistsError: #todo: add time to file instead of counter
             i += 1
             new_filepath = f'{filepath[:-7]}{title} ({i}).ts'
     return new_filepath
@@ -30,11 +30,12 @@ def formatTitle(title):
     return title
 
 async def getStreamTitle(session, url):
-    plugin = session.resolve_url(url)[0]
     title = None
     while title == None:
         await asyncio.sleep(1)
-        title = plugin(url).get_metadata()["title"]
+        plugin = session.resolve_url(url)[1](session, url)
+        title = plugin.get_title()
+        print(title, end= " ")
     return title
 
 async def getStream(session, url):
@@ -45,10 +46,10 @@ async def getStream(session, url):
     stream = streamformats["best"].open()
     return stream
 
-async def writeStreamToFile(stream, filepath, title):
+async def writeStreamToFile(stream, filepath, title):#todo: while bool(data): is unreliable
     vod = open(filepath, "ab")
     data = True
-    while bool(data):
+    while bool(data): #change with getstream? bool(data) is not reliable
         data = stream.read(1024)
         vod.write(data)
         await asyncio.sleep(0) #allows other tasks to execute
