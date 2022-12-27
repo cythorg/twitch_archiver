@@ -3,7 +3,7 @@ A simple and somewhat barebones implementation of the [streamlink](https://strea
 ## what is this?
 This is a small program written for the purpose of recording and downloading livestreams from the livestreaming service 'twitch.tv'
 
-Twitch has a tendency to mute portions and/or remove entire uploads in response to DMCA requests. In addition, be it because of timezones, negligence, ignorance, or choice it is not possible to be present for every single stream. The problem occurs when missing a stream that also happens to have been DMCA'd, edited, muted, deleted, or is otherwise unavalible through normal means. A problem which is solved by this neat little script, wahoo!
+Twitch has a tendency to mute portions and/or remove entire uploads in response to DMCA requests. In addition, be it because of timezones, negligence, ignorance, or choice, it is not possible to be present for every single stream. The problem occurs when missing a stream that also happens to have been DMCA'd, edited, muted, deleted, or is otherwise unavalible through normal means. A problem which is solved by this neat little script, wahoo!
 
 ## how do I use this script?
 Written and tested for python 3.10.5+, this is __not__ a requirement - your python mileage may vary
