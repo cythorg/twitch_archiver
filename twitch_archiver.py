@@ -11,50 +11,26 @@ def setConfig(config_file):
             config.update({line[0].strip():line[1].strip()})
     return config
 
-def addTitleToFile(title, filepath):#todo: cleanup FileExistsError handling
-    new_filepath = f'{filepath[:-7]}{title}.ts' #the [:-7] slices 'live.ts' from the end of the temporary filename
-    while True:
-        try:
-            os.rename(filepath, new_filepath)
-            break
-        except FileExistsError:
-            log.warning("file '%s' already exists, appending current time", new_filepath)
-            new_filepath = f'{filepath[:-7]}{title}_{time.strftime("%H-%M")}.ts'
-    log.info("renamed file '%s' to '%s'", filepath, new_filepath)
+async def addTitleToFile(stream, filepath):#todo: cleanup FileExistsError handling
+    new_filepath = f'{filepath[:-7]}{stream.title}.ts' #the [:-7] slices 'live.ts' from the end of the temporary filename
+    try:
+        os.rename(filepath, new_filepath)
+    except FileExistsError:
+        log.warning("'%s' already exists, appending current time", new_filepath)
+        new_filepath = f'{filepath[:-7]}{stream.title}_{time.strftime("%H-%M-%S")}.ts'
+    log.info("renamed '%s' to '%s'", filepath, new_filepath)
     return new_filepath
 
-def formatTitle(title):
-    forbiddenchars = r'<>:"/\|!?*'
-    title = "".join(char for char in title if char not in forbiddenchars)
-    title = title.strip()
-    return title
-
-async def getStreamTitle(session, url):
-    log.info("attempting to resolve stream title")
-    title = None
-    while title == None:
-        await asyncio.sleep(1)
-        plugin = session.resolve_url(url)[1](session, url) #instantiates a new plugin.Twitch class, session.resolve_url returns a tuple(str, type(Plugin), str)
-        title = plugin.get_title()
-    log.info("resolved stream title")
-    return title
-
-async def writeStreamToFile(stream, filepath, title):#todo: while bool(data): is unreliable
-    log.info("writing stream to file '%s'", filepath)
-    vod = open(filepath, "ab")
-    data = True
-    while bool(data): #change with getstream? bool(data) is not reliable
-        data = stream.read(1024)
-        vod.write(data)
+async def writeStreamToFile(stream, filepath):
+    log.info("writing stream to '%s'", filepath)
+    while stream.isLive():
+        data = stream.stream.read(1024)
+        with open(filepath, "ab") as vod:
+            vod.write(data)
         await asyncio.sleep(0) #allows other tasks to execute
-        if type(title) == asyncio.Task and title.done() == True: #utilising classes and callback functions may be a better implementation for this
-            title = formatTitle(title.result())
-            vod.close()
-            log.info("closed file '%s'", filepath)
-            filepath = addTitleToFile(title, filepath)
-            log.info("writing stream to file '%s'", filepath)
-            vod = open(filepath, "ab")
-    vod.close()
+        # if stream._title != None: #utilising classes and callback functions may be a better implementation for this
+        #     title = Stream._formatTitle(title.result())
+        #     filepath = await addTitleToFile(title, filepath)
     log.info("closed file '%s'", filepath)
     return
 
@@ -62,20 +38,41 @@ class Stream:
     _session = None
     _url = None
     stream = None
+    title = None
     def __init__(self, session, url) -> None:
         self._session = session
         self._url = url
-        pass
 
     async def setStream(self):
         log.info("waiting for stream to go live")
-        streamformats = self._session.streams(url)
+        streamformats = self._session.streams(self._url)
         while len(streamformats) == 0 and streamformats.get("best", None) == None:
             await asyncio.sleep(1)
             streamformats = self._session.streams(url)
         self.stream = streamformats["best"].open()
         log.info("stream is live")
+        return
+    
+    async def setTitle(self):
+        log.info("attempting to resolve stream title")
+        while (title := self._session.resolve_url(self._url)[1](self._session, self._url).get_title()) == None:
+            # .resolve_url() instantiates a new plugin.Twitch class, returns a tuple(str, type(Plugin), str)
+            # .get_title() returns the (re?)initialised title metadata from the (new) plugin.Twitch class
+            await asyncio.sleep(1)
+        self.title = self._formatTitle(title)
+        log.info("resolved stream title")
+        return
+    
+    def _formatTitle(self, title):
+        forbiddenchars = r'<>:"/\|!?*'
+        title = "".join(char for char in title if char not in forbiddenchars)
+        title = title.strip()
+        return title
 
+    def isLive(self) -> bool:
+        if len(self._session.streams(self._url)) != 0:
+            return True
+        return False
 
 config = setConfig(r'./twitch_archiver.config')
 logging.basicConfig(level=config["log_level"], format='%(asctime)s [%(name)s] [%(levelname)s] %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
@@ -107,12 +104,12 @@ async def mainloop():
         directory, streamer, date = config["out_dir"], config["streamer"], time.strftime(config["time_format"]) 
         filepath = f'{directory}{streamer}_{date}_live.ts'
 
-        title = asyncio.create_task(getStreamTitle(session, url))
+        fetchTitle = asyncio.create_task(stream.setTitle())
+        fetchTitle.add_done_callback(await addTitleToFile(stream, filepath)) #does not work
+        await writeStreamToFile(stream, filepath)
 
-        await writeStreamToFile(stream.stream, filepath, title)
-
-        if title.done() == False:
-            title.cancel()
+        if stream.title == None:
+            fetchTitle.cancel()
             log.error('unable to retrieve stream title')
             addTitleToFile("title-error", filepath)
 
