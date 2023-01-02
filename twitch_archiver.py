@@ -39,16 +39,6 @@ async def getStreamTitle(session, url):
     log.info("resolved stream title")
     return title
 
-async def getStream(session, url):
-    log.info("waiting for stream to go live")
-    streamformats = session.streams(url)
-    while len(streamformats) == 0 and streamformats.get("best", None) == None:
-        await asyncio.sleep(1)
-        streamformats = session.streams(url)
-    stream = streamformats["best"].open()
-    log.info("stream is live")
-    return stream
-
 async def writeStreamToFile(stream, filepath, title):#todo: while bool(data): is unreliable
     log.info("writing stream to file '%s'", filepath)
     vod = open(filepath, "ab")
@@ -67,6 +57,24 @@ async def writeStreamToFile(stream, filepath, title):#todo: while bool(data): is
     vod.close()
     log.info("closed file '%s'", filepath)
     return
+
+class Stream:
+    _session = None
+    _url = None
+    stream = None
+    def __init__(self, session, url) -> None:
+        self._session = session
+        self._url = url
+        pass
+
+    async def setStream(self):
+        log.info("waiting for stream to go live")
+        streamformats = self._session.streams(url)
+        while len(streamformats) == 0 and streamformats.get("best", None) == None:
+            await asyncio.sleep(1)
+            streamformats = self._session.streams(url)
+        self.stream = streamformats["best"].open()
+        log.info("stream is live")
 
 
 config = setConfig(r'./twitch_archiver.config')
@@ -93,14 +101,15 @@ session.set_plugin_option("twitch", "twitch-disable-ads", config["disable_ads"])
 
 async def mainloop():
     while True:
-        stream = await getStream(session, url)
+        stream = Stream(session, url)
+        await stream.setStream()
 
         directory, streamer, date = config["out_dir"], config["streamer"], time.strftime(config["time_format"]) 
         filepath = f'{directory}{streamer}_{date}_live.ts'
 
         title = asyncio.create_task(getStreamTitle(session, url))
 
-        await writeStreamToFile(stream, filepath, title)
+        await writeStreamToFile(stream.stream, filepath, title)
 
         if title.done() == False:
             title.cancel()
