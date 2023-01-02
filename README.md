@@ -13,4 +13,6 @@ Simply clone this repository into a suitable place on your computer or microproc
 Now the intended use of this script is running 24/7 as a service on a low power microprocessor, but you could just as easily run this from a dedicated machine you use for other things, or even just a terminal on your desktop every time you want to record a stream, or in a terminal on your desktop all the time like a complete degenerate - if you do the latter I envy your disregard for energy prices
 
 ### configuring the config
+//todo
 ## a mini tutorial
+//todo
