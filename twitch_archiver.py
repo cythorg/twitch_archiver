@@ -60,11 +60,13 @@ class Stream:
 
     def _updateFilepath(self):
         new_filepath = f'{self._filepath[:-7]}{self._title}.ts' #the [:-7] slices 'live.ts' from the end of the temporary filename
-        try:
-            os.rename(self._filepath, new_filepath)
-        except FileExistsError:
-            log.warning("'%s' already exists, appending current time", new_filepath)
-            new_filepath = f'{self._filepath[:-7]}{self._title}_{time.strftime("%H-%M-%S")}.ts'
+        while True:
+            try:
+                os.rename(self._filepath, new_filepath)
+                break
+            except FileExistsError:
+                log.warning("'%s' already exists, appending current time", new_filepath)
+                new_filepath = f'{self._filepath[:-7]}{self._title}_{time.strftime("%H-%M-%S")}.ts'
         log.info("renamed '%s' to '%s'", self._filepath, new_filepath)
         self._filepath = new_filepath
         return
