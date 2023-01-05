@@ -56,6 +56,8 @@ class Stream:
         new_filepath = f'{self._filepath[:-7]}{self._title}.ts' #the [:-7] slices 'live.ts' from the end of the temporary filename
         while True:
             try:
+                if os.path.exists(new_filepath):
+                    raise FileExistsError
                 os.rename(self._filepath, new_filepath)
                 break
             except FileExistsError:
