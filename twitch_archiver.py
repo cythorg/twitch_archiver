@@ -47,14 +47,14 @@ class Stream:
         self._updateFilepath()
         return
     
-    def _formatTitle(self, title) -> str:
+    def _sanitiseString(self, input) -> str:
         forbiddenchars = r'<>:"/\|!?*'
-        title = "".join(char for char in title if char not in forbiddenchars)
-        title = title.strip()
-        return title
+        input = "".join(char for char in input if char not in forbiddenchars)
+        input = input.strip()
+        return input
 
     def setFilepath(self, config):
-        directory, streamer, date = config["out_dir"], config["streamer"], time.strftime(config["time_format"]) 
+        directory, streamer, date = config["out_dir"], config["streamer"], self._sanitiseString(time.strftime(config["time_format"])) 
         self._filepath = f'{directory}{streamer}_{date}_live.ts'
         return
 
