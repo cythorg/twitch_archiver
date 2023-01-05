@@ -37,7 +37,7 @@ class Stream:
             # .resolve_url() instantiates a new plugin.Twitch class, returns a tuple(str, type(Plugin), str)
             # .get_title() returns the (re?)initialised title metadata from the (new) plugin.Twitch class
             await asyncio.sleep(1)
-        self._title = self._formatTitle(title)
+        self._title = self._sanitiseString(title)
         log.info("resolved stream title")
         self._updateFilepath()
         return
@@ -76,7 +76,7 @@ class Stream:
             return True
         return False
 
-    def writeToFile(self):
+    async def writeToFile(self):
         data = self._stream.read(1024)
         with open(self._filepath, "ab") as vod:
             vod.write(data)
@@ -113,7 +113,7 @@ async def mainloop():
 
         log.info("writing stream to '%s'", stream._filepath)
         while stream.isLive():
-            stream.writeToFile()
+            await stream.writeToFile()
             await asyncio.sleep(0)
         log.info("stream ended")
         
