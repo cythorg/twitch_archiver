@@ -60,8 +60,23 @@ The 'twitch_archiver.config' file contains variable settings that change how the
    The resulting string consisting of 30 alphanumerical characters is your OAuth token  
    Credit for the above explaination as well as more information can be found at https://streamlink.github.io/cli/plugins/twitch.html  
 
+ - Other options  
+   The following options are an interface for options in the streamlink twitch plugin  
+   Their values can be either True or False, represented by `1` or `0` respectivelty  
    
+   `record_reruns`  
+   Has a default value `record_reruns=0`  
+   Determines whether streams labelled as 're-runs' by the broadcaster will be recorded  
    
+   `disable_hosting`  
+   Has a default value `disable_hosting=1`  
+   Determines whether the script will record streams when the streamer is 'hosting' another channel  
+   Note this is untested and may cause strange behaviour or other issues  
    
+   `disable_ads`  
+   Has a default value `disable_ads=1`  
+   Determines whether the the script will record adverts embedded into the stream  
+   If for some reason you would like to watch ads in your stream, feel free to change this, I do not know why you would do this to yourself  
+
 ## A mini tutorial
 //todo
