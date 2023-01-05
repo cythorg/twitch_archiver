@@ -44,14 +44,8 @@ class Stream:
 
     def updateTitle(self, title):
         self._title = title
-        self._updateFilepath()
+        self._updateFilepath() #because of how _updateFilepath() works, updateTitle() should only be called if setTitle() fails to complete
         return
-    
-    def _sanitiseString(self, input) -> str:
-        forbiddenchars = r'<>:"/\|!?*'
-        input = "".join(char for char in input if char not in forbiddenchars)
-        input = input.strip()
-        return input
 
     def setFilepath(self, config):
         directory, streamer, date = config["out_dir"], config["streamer"], self._sanitiseString(time.strftime(config["time_format"])) 
@@ -70,6 +64,12 @@ class Stream:
         log.info("renamed '%s' to '%s'", self._filepath, new_filepath)
         self._filepath = new_filepath
         return
+    
+    def _sanitiseString(self, input) -> str:
+        forbiddenchars = r'<>:"/\|!?*'
+        input = "".join(char for char in input if char not in forbiddenchars)
+        input = input.strip()
+        return input
 
     def isLive(self) -> bool:
         if len(self._session.streams(self._url)) != 0:
