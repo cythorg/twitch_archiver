@@ -1,22 +1,13 @@
 import asyncio, time, os, logging
 from streamlink import Streamlink
 
-def setConfig(config_file):
-    with open(config_file, 'r') as f:
-        lines = f.readlines()
-    config = {}
-    for line in lines:
-        if line.startswith('#') == False and len(line.strip()) > 0 :
-            line = line.split('=')
-            config.update({line[0].strip():line[1].strip()})
-    return config
-
 class Stream:
     _session = None
     _url = None
     _stream = None
     _title = None
     _filepath = None
+    is_live = False
     def __init__(self, session, url) -> None:
         self._session = session
         self._url = url
@@ -28,6 +19,7 @@ class Stream:
             await asyncio.sleep(1)
             streamformats = self._session.streams(url)
         self._stream = streamformats["best"].open()
+        self.is_live = True
         log.info("stream is live")
         return
     
@@ -73,16 +65,29 @@ class Stream:
         input = input.strip()
         return input
 
-    def isLive(self) -> bool:
-        if len(self._session.streams(self._url)) != 0:
-            return True
-        return False
+    async def checkIsLive(self, timeout):
+        while True:
+            await asyncio.sleep(timeout)
+            if len(self._session.streams(self._url)) != 0:
+                self.is_live = True
+            else:
+                self.is_live = False
 
     async def writeToFile(self):
         data = self._stream.read(1024)
         with open(self._filepath, "ab") as vod:
             vod.write(data)
         return
+
+def setConfig(config_file):
+    with open(config_file, 'r') as f:
+        lines = f.readlines()
+    config = {}
+    for line in lines:
+        if line.startswith('#') == False and len(line.strip()) > 0 :
+            line = line.split('=')
+            config.update({line[0].strip():line[1].strip()})
+    return config
 
 config = setConfig(r'./twitch_archiver.config')
 logging.basicConfig(level=config["log_level"], format='%(asctime)s [%(name)s] [%(levelname)s] %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
@@ -109,16 +114,23 @@ session.set_plugin_option("twitch", "twitch-disable-ads", config["disable_ads"])
 async def mainloop():
     while True:
         stream = Stream(session, url)
+        #delayed initialisation that doesn't fit neatly into Stream.__init__() due to async shenanigans,
+        #once the `Stream._stream` file object property has been set, parallel tasks are utilised to set additional properties without 'blocking' the event handler
+        #this allows writeToFile() to start recording as soon as possible in relation to the start of the stream
         await stream.setStream()
         stream.setFilepath(config)
         fetch_title = asyncio.create_task(stream.setTitle())
+        fetch_is_live = asyncio.create_task(stream.checkIsLive(30))
 
         log.info("writing stream to '%s'", stream._filepath)
-        while stream.isLive():
+        while stream.is_live:
             await stream.writeToFile()
+            #asyncio runs on a single thread, without the following line writeToFile() would always have the highest priority in the event handler, blocking other tasks from executing
             await asyncio.sleep(0)
-        log.info("stream ended")
-        
+        log.info("stream ended")  
+
+        #task handling once the stream has concluded to prevent current loop's Stream class properties interacting with the next loop's as of yet unset properties
+        fetch_is_live.cancel()
         if fetch_title.done() == False:
             fetch_title.cancel()
             log.error('unable to retrieve stream title')
