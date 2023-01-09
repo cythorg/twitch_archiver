@@ -8,7 +8,7 @@ Twitch has a tendency to mute portions and/or remove entire uploads in response 
 ## How do I use this script?
 Written and tested for python 3.10.5+, this is __not__ a requirement - your python mileage may vary
 
-You will however need to install the [Streamlink](https://streamlink.github.io/install.html) python library, this __is__ a requirement
+You will however need to install the [Streamlink](https://streamlink.github.io/install.html#pypi-package-and-source-code) python library, this __is__ a requirement
 
 Simply clone this repository into a suitable place on your computer or microprocessor of choice, configure the 'twitch_archiver.config' file (see [configuring the config](#configuring-the-config)) and then make sure when you run the script that your working directory contains said config file and you're done.
 
