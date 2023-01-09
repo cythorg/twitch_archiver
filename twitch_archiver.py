@@ -36,7 +36,10 @@ class Stream:
 
     def updateTitle(self, title):
         self._title = title
-        self._updateFilepath() #because of how _updateFilepath() works, updateTitle() should only be called if setTitle() fails to complete
+        self._updateFilepath()
+        # because _updateFilepath() assumes that the filepath being updated ends in 'live.ts'
+        # updateTitle() should only be called if setTitle() fails, this means that updateTitle()
+        # should only ever be called once per instance of the Stream class
         return
 
     def setFilepath(self, config):
@@ -45,15 +48,17 @@ class Stream:
         return
 
     def _updateFilepath(self):
-        new_filepath = f'{self._filepath[:-7]}{self._title}.ts' #the [:-7] slices 'live.ts' from the end of the temporary filename
+        new_filepath = f'{self._filepath[:-7]}{self._title}.ts'
+        # [:-7] slices 'live.ts' from the end of the temporary filename
         while True:
             try:
                 if os.path.exists(new_filepath):
-                    raise FileExistsError
+                    raise FileExistsError("'%s' already exists", new_filepath)
                 os.rename(self._filepath, new_filepath)
                 break
-            except FileExistsError:
-                log.warning("'%s' already exists, appending current time", new_filepath)
+            except FileExistsError as message:
+                log.warning(message)
+                log.info("appending current time to filepath")
                 new_filepath = f'{self._filepath[:-7]}{self._title}_{time.strftime("%H-%M-%S")}.ts'
         log.info("renamed '%s' to '%s'", self._filepath, new_filepath)
         self._filepath = new_filepath
@@ -74,9 +79,14 @@ class Stream:
                 self.is_live = False
 
     async def writeToFile(self):
-        data = self._stream.read(1024)
-        with open(self._filepath, "ab") as vod:
-            vod.write(data)
+        try:
+            data = self._stream.read(1024)
+            with open(self._filepath, "ab") as vod:
+                vod.write(data)
+        except OSError as message:
+            # self._stream.read() raises `OSError("Read Timeout")` rarely on stream ended
+            log.error(message)
+            self.is_live = False
         return
 
 def setConfig(config_file):
@@ -114,9 +124,10 @@ session.set_plugin_option("twitch", "twitch-disable-ads", config["disable_ads"])
 async def mainloop():
     while True:
         stream = Stream(session, url)
-        #delayed initialisation that doesn't fit neatly into Stream.__init__() due to async shenanigans,
-        #once the `Stream._stream` file object property has been set, parallel tasks are utilised to set additional properties without 'blocking' the event handler
-        #this allows writeToFile() to start recording as soon as possible in relation to the start of the stream
+        # delayed initialisation that doesn't fit neatly into Stream.__init__() due to async shenanigans,
+        # once the `Stream._stream` file object property has been set, parallel tasks are utilised to set
+        # additional properties without 'blocking' the event handler, this allows writeToFile() to start
+        # recording as soon as possible in relation to the start of the stream
         await stream.setStream()
         stream.setFilepath(config)
         fetch_title = asyncio.create_task(stream.setTitle())
@@ -125,11 +136,13 @@ async def mainloop():
         log.info("writing stream to '%s'", stream._filepath)
         while stream.is_live:
             await stream.writeToFile()
-            #asyncio runs on a single thread, without the following line writeToFile() would always have the highest priority in the event handler, blocking other tasks from executing
             await asyncio.sleep(0)
+            # asyncio runs on a single thread so without the previous line writeToFile() would always have the
+            # highest priority in the event handler, effectively blocking other tasks from executing
         log.info("stream ended")  
 
-        #task handling once the stream has concluded to prevent current loop's Stream class properties interacting with the next loop's as of yet unset properties
+        # task handling once the stream has concluded to prevent current loop's Stream class properties
+        # from interacting with the next loop's as of yet unset properties
         fetch_is_live.cancel()
         if fetch_title.done() == False:
             fetch_title.cancel()
