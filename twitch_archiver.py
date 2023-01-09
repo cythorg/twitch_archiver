@@ -139,7 +139,7 @@ async def mainloop():
             await asyncio.sleep(0)
             # asyncio runs on a single thread so without the previous line writeToFile() would always have the
             # highest priority in the event handler, effectively blocking other tasks from executing
-        log.info("stream ended")  
+        log.info("stream ended")
 
         # task handling once the stream has concluded to prevent current loop's Stream class properties
         # from interacting with the next loop's as of yet unset properties
