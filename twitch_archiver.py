@@ -53,7 +53,7 @@ class Stream:
         while True:
             try:
                 if os.path.exists(new_filepath):
-                    raise FileExistsError("'%s' already exists", new_filepath)
+                    raise FileExistsError(f"'{new_filepath}' already exists")
                 os.rename(self._filepath, new_filepath)
                 break
             except FileExistsError as message:
