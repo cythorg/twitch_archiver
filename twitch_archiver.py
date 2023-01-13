@@ -116,10 +116,10 @@ url = f'https://twitch.tv/{config["streamer"]}'
 
 session = Streamlink()
 if config["oauth_token"] != "":
-    session.set_plugin_option("twitch", "twitch-api-header", f'Authentication=OAuth {config["oauth_token"]}')
+    session.set_plugin_option("twitch", "api-header", {"Authorization":f'OAuth {config["oauth_token"]}'})
 session.set_plugin_option("twitch", "record-reruns", config["record_reruns"])
 session.set_plugin_option("twitch", "disable-hosting", config["disable_hosting"])
-session.set_plugin_option("twitch", "twitch-disable-ads", config["disable_ads"])
+session.set_plugin_option("twitch", "disable-ads", config["disable_ads"])
 
 async def mainloop():
     while True:
