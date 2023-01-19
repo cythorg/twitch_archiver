@@ -131,7 +131,7 @@ async def mainloop():
         await stream.setStream()
         stream.setFilepath(config)
         fetch_title = asyncio.create_task(stream.setTitle())
-        fetch_is_live = asyncio.create_task(stream.checkIsLive(30))
+        fetch_is_live = asyncio.create_task(stream.checkIsLive(5)) #30 second timeout
 
         log.info("writing stream to '%s'", stream._filepath)
         while stream.is_live:
