@@ -17,7 +17,7 @@ class Stream:
         streamformats = self._session.streams(self._url)
         while len(streamformats) == 0 and streamformats.get("best", None) == None:
             await asyncio.sleep(1)
-            streamformats = self._session.streams(url)
+            streamformats = self._session.streams(self._url)
         self._stream = streamformats["best"].open()
         self.is_live = True
         log.info("stream is live")
@@ -44,12 +44,12 @@ class Stream:
 
     def setFilepath(self, config):
         directory, streamer, date = config["out_dir"], config["streamer"], self._sanitiseString(time.strftime(config["time_format"])) 
-        self._filepath = f'{directory}{streamer}_{date}_live.ts'
+        self._filepath = f'{directory}{streamer}_{date}.live'
         return
 
     def _updateFilepath(self):
-        new_filepath = f'{self._filepath[:-7]}{self._title}.ts'
-        # [:-7] slices 'live.ts' from the end of the temporary filename
+        new_filepath = f'{self._filepath[:-5]}_{self._title}.ts'
+        # [:-5] slices '.live' from the end of the temporary filename
         while True:
             try:
                 if os.path.exists(new_filepath):
@@ -143,9 +143,11 @@ async def mainloop():
 
         # task handling once the stream has concluded to prevent current loop's Stream class properties
         # from interacting with the next loop's as of yet unset properties
-        fetch_is_live.cancel()
-        if fetch_title.done() == False:
-            fetch_title.cancel()
+        while fetch_is_live.cancel():
+            await asyncio.sleep(0)
+            stream.is_live = False
+        while fetch_title.cancel():
+            await asyncio.sleep(0)
             log.error('unable to retrieve stream title')
             stream.updateTitle("title-error")
 
