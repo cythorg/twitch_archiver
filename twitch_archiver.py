@@ -2,15 +2,24 @@ import asyncio, time, os, logging
 from streamlink import Streamlink
 
 class Stream:
-    _session = None
     _url = None
+    _session = None
     _stream = None
     _title = None
     _filepath = None
     is_live = False
-    def __init__(self, session, url) -> None:
-        self._session = session
+    def __init__(self, url) -> None:
         self._url = url
+        self._session = self.setSession()
+
+    def setSession(self):
+        session = Streamlink()
+        if config["oauth_token"] != "":
+            session.set_plugin_option("twitch", "api-header", {"Authorization":f'OAuth {config["oauth_token"]}'})
+        session.set_plugin_option("twitch", "record-reruns", config["record_reruns"])
+        session.set_plugin_option("twitch", "disable-hosting", config["disable_hosting"])
+        session.set_plugin_option("twitch", "disable-ads", config["disable_ads"])
+        return session
 
     async def setStream(self):
         log.info("waiting for stream to go live")
@@ -114,16 +123,9 @@ if config["streamer"] == "":
     raise Exception(message)
 url = f'https://twitch.tv/{config["streamer"]}'
 
-session = Streamlink()
-if config["oauth_token"] != "":
-    session.set_plugin_option("twitch", "api-header", {"Authorization":f'OAuth {config["oauth_token"]}'})
-session.set_plugin_option("twitch", "record-reruns", config["record_reruns"])
-session.set_plugin_option("twitch", "disable-hosting", config["disable_hosting"])
-session.set_plugin_option("twitch", "disable-ads", config["disable_ads"])
-
 async def mainloop():
     while True:
-        stream = Stream(session, url)
+        stream = Stream(url)
         # delayed initialisation that doesn't fit neatly into Stream.__init__() due to async shenanigans,
         # once the `Stream._stream` file object property has been set, parallel tasks are utilised to set
         # additional properties without 'blocking' the event handler, this allows writeToFile() to start
