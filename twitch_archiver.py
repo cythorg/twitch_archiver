@@ -112,7 +112,9 @@ config = setConfig(r'./twitch_archiver.config')
 logging.basicConfig(level=config["log_level"], format='%(asctime)s [%(name)s] [%(levelname)s] %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger()
 for option in config:
-    log.info("config.%s=%s", option, config[option])
+    if config[option] is config["oauth_token"]: value = f'{config["oauth_token"][:6]}{(max(0, len(config["oauth_token"]))-6)*"*"}'
+    else: value = config[option]
+    log.info("config.%s=%s", option, value)
 if os.path.isdir(config["out_dir"]) == False:
     message = "'out_dir' in twitch_archiver.config is not a directory or does not exist"
     log.critical(message)
