@@ -1,5 +1,5 @@
 import asyncio, time, os, logging
-from streamlink import Streamlink
+from streamlink import Streamlink, PluginError
 
 class Stream:
     _url = None
@@ -132,7 +132,13 @@ async def mainloop():
         # once the `Stream._stream` file object property has been set, parallel tasks are utilised to set
         # additional properties without 'blocking' the event handler, this allows writeToFile() to start
         # recording as soon as possible in relation to the start of the stream
-        await stream.setStream()
+        try:
+            await stream.setStream()
+        except PluginError as message:
+            # setStream() raises PluginError on reconnect from internet failure, very strange behaviour
+            log.warning(message)
+            log.info("reinitialising 'Stream' class")
+            continue
         stream.setFilepath(config)
         fetch_title = asyncio.create_task(stream.setTitle())
         fetch_is_live = asyncio.create_task(stream.checkIsLive(30))
@@ -152,7 +158,7 @@ async def mainloop():
             stream.is_live = False
         while fetch_title.cancel():
             await asyncio.sleep(0)
-            log.error('unable to retrieve stream title')
+            log.error("unable to retrieve stream title")
             stream.updateTitle("title-error")
 
 asyncio.run(mainloop())
