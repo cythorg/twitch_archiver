@@ -68,7 +68,7 @@ class Stream:
             except FileExistsError as message:
                 log.warning(message)
                 log.info("appending current time to filepath")
-                new_filepath = f'{self._filepath[:-7]}{self._title}_{time.strftime("%H-%M-%S")}.ts'
+                new_filepath = f'{self._filepath[:-5]}{self._title}_{time.strftime("%H-%M-%S")}.ts'
         log.info("renamed '%s' to '%s'", self._filepath, new_filepath)
         self._filepath = new_filepath
         return
@@ -150,6 +150,7 @@ async def mainloop():
             # asyncio runs on a single thread so without the previous line writeToFile() would always have the
             # highest priority in the event handler, effectively blocking other tasks from executing
         log.info("stream ended")
+        stream._stream.close()
 
         # task handling once the stream has concluded to prevent current loop's Stream class properties
         # from interacting with the next loop's as of yet unset properties
