@@ -1,111 +1,153 @@
-import asyncio, time, os, logging
-from streamlink import Streamlink, PluginError
+import asyncio
+import logging
+import os
+import time
+
+from streamlink import PluginError, Streamlink
+from typing import BinaryIO
 
 class Stream:
-    _url = None
-    _session = None
-    _stream = None
-    _title = None
-    _filepath = None
-    is_live = False
-    def __init__(self, url) -> None:
-        self._url = url
-        self._session = self.setSession()
+    _url: str = None
+    _session: Streamlink = None
 
-    def setSession(self):
+    _directory: str = None
+    _streamer: str = None
+    _time_format: str = None
+    _start_time: str = None
+    _title: str = None
+    _filepath: str = None
+
+    _stream: BinaryIO = None
+
+    _is_live: bool = False
+    _timeout: int = 5
+
+    _fetch_is_live: asyncio.Task = None
+    _fetch_title: asyncio.Task = None
+
+    def __init__(self, config):
         session = Streamlink()
         if config["oauth_token"] != "":
             session.set_plugin_option("twitch", "api-header", {"Authorization":f'OAuth {config["oauth_token"]}'})
         session.set_plugin_option("twitch", "record-reruns", config["record_reruns"])
         session.set_plugin_option("twitch", "disable-hosting", config["disable_hosting"])
         session.set_plugin_option("twitch", "disable-ads", config["disable_ads"])
-        return session
 
-    async def setStream(self):
-        log.info("waiting for stream to go live")
-        streamformats = self._session.streams(self._url)
-        while len(streamformats) == 0 and streamformats.get("best", None) == None:
-            await asyncio.sleep(1)
-            streamformats = self._session.streams(self._url)
-        self._stream = streamformats["best"].open()
-        self.is_live = True
-        log.info("stream is live")
-        return
-    
-    async def setTitle(self):
+        directory = config["out_dir"].replace("\\", "/")
+        if directory[-1] != "/": directory += "/"
+
+        self._url = f'https://twitch.tv/{config["streamer"]}'
+        self._session = session
+        self._directory = directory
+        self._streamer = config["streamer"]
+        self._time_format = config["time_format"]
+
+    def __await__(self):
+        async def ainit():
+            self._fetch_is_live = asyncio.create_task(self._fetchIsLive())
+            log.info("wating for stream to go live")
+            while not self._is_live:
+                await asyncio.sleep(0)
+            log.info("stream is live")
+
+            self._start_time = time.strftime(self._time_format)
+            self._stream = self._session.streams(self._url)["best"].open()
+            await self._updateFilepath()
+            self._fetch_title = asyncio.create_task(self._fetchTitle())
+            return self
+        return ainit().__await__()
+
+    async def __aenter__(self):
+        await self
+        return self
+
+    async def __aexit__(self, exception_type, exception_value, exception_traceback):
+        self._stream = self._stream.close()
+        while self._fetch_is_live is not None and self._fetch_is_live.cancel():
+            await asyncio.sleep(0)
+            self._is_live = False
+        while self._fetch_title is not None and self._fetch_title.cancel():
+            await asyncio.sleep(0)
+            log.error("unable to retrieve stream title")
+            self._title = "title-error"
+            await self._updateFilepath()
+
+        if exception_type:
+            if exception_type is PluginError:
+                # _fetchIsLive() raises PluginError on session expiration, i.e. when twitch refuses the connection
+                log.error(exception_value)
+                log.info("twitch.tv refused the connection")
+            elif exception_type is OSError:
+                # self._stream.read() in the record() method raises OSError("Read Timeout") rarely on stream ended
+                log.error(exception_value)
+            else:
+                return
+        return True
+
+    async def _fetchIsLive(self):
+        while True:
+            await asyncio.sleep(self._timeout)
+            try:
+                if len(self._session.streams(self._url)) != 0:
+                    self._is_live = True
+                else:
+                    self._is_live = False
+            except asyncio.CancelledError as message:
+                log.info(message)
+                raise
+            except PluginError as message:
+                log.error("PluginError raised in _fetchIsLive")
+                log.error(message)
+            except BaseException as message:
+                log.error("Unhandled Exception raised in _fetchIsLive")
+                log.exception(message)
+
+    async def _fetchTitle(self):
+        #await asyncio.sleep(0) # in edge cases where title is immediately avaliable, allows _updateFilepath() in ainit() to complete
         log.info("attempting to resolve stream title")
-        while (title := self._session.resolve_url(self._url)[1](self._session, self._url).get_title()) == None:
+        while (title := self._session.resolve_url(self._url)[1](self._session, self._url).get_title()) is None:
             # .resolve_url() instantiates a new plugin.Twitch class, returns a tuple(str, type(Plugin), str)
             # .get_title() returns the (re?)initialised title metadata from the (new) plugin.Twitch class
-            await asyncio.sleep(1)
-        self._title = self._sanitiseString(title)
+            await asyncio.sleep(self._timeout)
         log.info("resolved stream title")
-        self._updateFilepath()
-        return
-
-    def updateTitle(self, title):
         self._title = title
-        self._updateFilepath()
-        # because _updateFilepath() assumes that the filepath being updated ends in 'live.ts'
-        # updateTitle() should only be called if setTitle() fails, this means that updateTitle()
-        # should only ever be called once per instance of the Stream class
+        await self._updateFilepath()
         return
 
-    def setFilepath(self, config):
-        directory, streamer, date = config["out_dir"], config["streamer"], self._sanitiseString(time.strftime(config["time_format"])) 
-        self._filepath = f'{directory}{streamer}_{date}.live'
+    async def _updateFilepath(self):
+        forbidden_chars = r'<>:"/\|!?*'
+        sanitise_filename = lambda filename : "".join(char for char in filename if char not in forbidden_chars)
+        generate_filename = lambda *args : sanitise_filename(f'{("".join(f"_{arg}" for arg in args if arg is not None))[1:]}.ts')
+
+        filepath = f'{self._directory}{generate_filename(self._streamer, self._start_time, self._title)}'
+        while os.path.exists(filepath):
+            await asyncio.sleep(1)
+            filepath = f'{self._directory}{generate_filename(self._streamer, self._start_time, self._title, time.strftime("%H-%M-%S"))}'
+
+        if self._filepath is not None:
+            os.rename(self._filepath, filepath)
+            log.info("renamed %s to %s", self._filepath, filepath)
+        self._filepath = filepath
         return
 
-    def _updateFilepath(self):
-        new_filepath = f'{self._filepath[:-5]}_{self._title}.ts'
-        # [:-5] slices '.live' from the end of the temporary filename
-        while True:
-            try:
-                if os.path.exists(new_filepath):
-                    raise FileExistsError(f"'{new_filepath}' already exists")
-                os.rename(self._filepath, new_filepath)
-                break
-            except FileExistsError as message:
-                log.warning(message)
-                log.info("appending current time to filepath")
-                new_filepath = f'{self._filepath[:-7]}{self._title}_{time.strftime("%H-%M-%S")}.ts'
-        log.info("renamed '%s' to '%s'", self._filepath, new_filepath)
-        self._filepath = new_filepath
-        return
-    
-    def _sanitiseString(self, input) -> str:
-        forbiddenchars = r'<>:"/\|!?*'
-        input = "".join(char for char in input if char not in forbiddenchars)
-        input = input.strip()
-        return input
-
-    async def checkIsLive(self, timeout):
-        while True:
-            await asyncio.sleep(timeout)
-            if len(self._session.streams(self._url)) != 0:
-                self.is_live = True
-            else:
-                self.is_live = False
-
-    async def writeToFile(self):
-        try:
-            data = self._stream.read(1024)
+    async def record(self):
+        log.info("writing stream to %s", self._filepath)
+        while self._is_live:
+            await asyncio.sleep(0)
+            data = self._stream.read(2048)
             with open(self._filepath, "ab") as vod:
                 vod.write(data)
-        except OSError as message:
-            # self._stream.read() raises `OSError("Read Timeout")` rarely on stream ended
-            log.error(message)
-            self.is_live = False
+        log.info("stream ended")
         return
 
-def setConfig(config_file):
+def setConfig(config_file) -> dict:
     with open(config_file, 'r') as f:
         lines = f.readlines()
     config = {}
     for line in lines:
-        if line.startswith('#') == False and len(line.strip()) > 0 :
-            line = line.split('=')
-            config.update({line[0].strip():line[1].strip()})
+        if line.startswith('#') or len(line.strip()) == 0: continue
+        line = line.split('=')
+        config.update({line[0].strip():line[1].strip()})
     return config
 
 config = setConfig(r'./twitch_archiver.config')
@@ -118,47 +160,19 @@ for option in config:
 if os.path.isdir(config["out_dir"]) == False:
     message = "'out_dir' in twitch_archiver.config is not a directory or does not exist"
     log.critical(message)
-    raise Exception(message)
+    raise NotADirectoryError(message)
+if os.access(config["out_dir"], os.W_OK) == False:
+    message = "'out_dir' in twitch_archiver.config does not have write permissions"
+    log.critical(message)
+    raise PermissionError(message)
 if config["streamer"] == "":
     message = "'streamer' not set in twitch_archiver.config"
     log.critical(message)
-    raise Exception(message)
-url = f'https://twitch.tv/{config["streamer"]}'
+    raise ValueError(message)
 
 async def mainloop():
     while True:
-        stream = Stream(url)
-        # delayed initialisation that doesn't fit neatly into Stream.__init__() due to async shenanigans,
-        # once the `Stream._stream` file object property has been set, parallel tasks are utilised to set
-        # additional properties without 'blocking' the event handler, this allows writeToFile() to start
-        # recording as soon as possible in relation to the start of the stream
-        try:
-            await stream.setStream()
-        except PluginError as message:
-            # setStream() raises PluginError on reconnect from internet failure, very strange behaviour
-            log.warning(message)
-            log.info("reinitialising 'Stream' class")
-            continue
-        stream.setFilepath(config)
-        fetch_title = asyncio.create_task(stream.setTitle())
-        fetch_is_live = asyncio.create_task(stream.checkIsLive(30))
-
-        log.info("writing stream to '%s'", stream._filepath)
-        while stream.is_live:
-            await stream.writeToFile()
-            await asyncio.sleep(0)
-            # asyncio runs on a single thread so without the previous line writeToFile() would always have the
-            # highest priority in the event handler, effectively blocking other tasks from executing
-        log.info("stream ended")
-
-        # task handling once the stream has concluded to prevent current loop's Stream class properties
-        # from interacting with the next loop's as of yet unset properties
-        while fetch_is_live.cancel():
-            await asyncio.sleep(0)
-            stream.is_live = False
-        while fetch_title.cancel():
-            await asyncio.sleep(0)
-            log.error("unable to retrieve stream title")
-            stream.updateTitle("title-error")
+        async with Stream(config) as stream:
+            await stream.record()
 
 asyncio.run(mainloop())
