@@ -68,7 +68,7 @@ class Stream:
             except FileExistsError as message:
                 log.warning(message)
                 log.info("appending current time to filepath")
-                new_filepath = f'{self._filepath[:-5]}{self._title}_{time.strftime("%H-%M-%S")}.ts'
+                new_filepath = f'{self._filepath[:-5]}_{self._title}_{time.strftime("%H-%M-%S")}.ts'
         log.info("renamed '%s' to '%s'", self._filepath, new_filepath)
         self._filepath = new_filepath
         return
