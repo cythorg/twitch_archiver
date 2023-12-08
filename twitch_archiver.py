@@ -15,10 +15,10 @@ class Stream:
     def setSession(self):
         session = Streamlink()
         if config["oauth_token"] != "":
-            session.set_plugin_option("twitch", "api-header", {"Authorization":f'OAuth {config["oauth_token"]}'})
-        session.set_plugin_option("twitch", "record-reruns", config["record_reruns"])
-        session.set_plugin_option("twitch", "disable-hosting", config["disable_hosting"])
-        session.set_plugin_option("twitch", "disable-ads", config["disable_ads"])
+            session.set_option("api-header", {"Authorization":f'OAuth {config["oauth_token"]}'})
+        #session.set_plugin_option("twitch", "record-reruns", config["record_reruns"]) // currently accidentally removed from streamlink twitch plugin
+        session.set_option("disable-hosting", config["disable_hosting"])
+        session.set_option("disable-ads", config["disable_ads"])
         return session
 
     async def setStream(self):
@@ -141,7 +141,7 @@ async def mainloop():
             continue
         stream.setFilepath(config)
         fetch_title = asyncio.create_task(stream.setTitle())
-        fetch_is_live = asyncio.create_task(stream.checkIsLive(30))
+        fetch_is_live = asyncio.create_task(stream.checkIsLive(5))
 
         log.info("writing stream to '%s'", stream._filepath)
         while stream.is_live:
