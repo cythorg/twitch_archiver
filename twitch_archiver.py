@@ -37,7 +37,7 @@ class Stream:
         while (title := self._session.resolve_url(self._url)[1](self._session, self._url).get_title()) == None:
             # .resolve_url() instantiates a new plugin.Twitch class, returns a tuple(str, type(Plugin), str)
             # .get_title() returns the (re?)initialised title metadata from the (new) plugin.Twitch class
-            await asyncio.sleep(1)
+            await asyncio.sleep(5)
         self._title = self._sanitiseString(title)
         log.info("resolved stream title")
         self._updateFilepath()
