@@ -25,7 +25,7 @@ class Stream:
         log.info("waiting for stream to go live")
         streamformats = self._session.streams(self._url)
         while len(streamformats) == 0 and streamformats.get("best", None) == None:
-            await asyncio.sleep(1)
+            await asyncio.sleep(5)
             streamformats = self._session.streams(self._url)
         self._stream = streamformats["best"].open()
         self.is_live = True
@@ -141,7 +141,7 @@ async def mainloop():
             continue
         stream.setFilepath(config)
         fetch_title = asyncio.create_task(stream.setTitle())
-        fetch_is_live = asyncio.create_task(stream.checkIsLive(5))
+        fetch_is_live = asyncio.create_task(stream.checkIsLive(30))
 
         log.info("writing stream to '%s'", stream._filepath)
         while stream.is_live:
