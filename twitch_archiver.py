@@ -93,6 +93,12 @@ class Stream:
             with open(self._filepath, "ab") as vod:
                 vod.write(data)
         except OSError as message:
+            # OSError '[Errno 12] not enough space' will crash system if allowed to loop
+            # forcing an exit with success code 0 allows systemd services to restart only if exiting on failure
+            if("Errno 12" in message):
+                log.critical(message)
+                exit(0)
+                
             # self._stream.read() raises `OSError("Read Timeout")` rarely on stream ended
             log.error(message)
             self.is_live = False
